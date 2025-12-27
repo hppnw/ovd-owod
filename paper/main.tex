@@ -279,409 +279,85 @@ OWOD 的核心特征包括：\textbf{主动未知检测}，模型无需用户输
 因此,本文将深入探讨OVD的核心技术,以及如何在OVD基础上实现开放世界能力，即OVD+OWOD,而对传统OWOD方法仅作简要介绍。
 
 \section{OVD 核心技术范式——从深度融合到实时推理}
-在目标检测领域，从"封闭世界"向"开放世界"转化的核心技术枢纽在于开放词汇目标检测（OVD）。本部分将深入探讨 OVD 的两种主流技术范式：一种是追求极致语义对齐与定位精度的"高精度流派"，基于 Transformer 架构实现多阶段深度对齐；另一种是致力于工业级端到端部署的"实时化流派"，通过重参数化技术实现高效推理。这两者共同构成了当前开放感知领域的技术基石。
+在目标检测领域，从“封闭世界”向“开放世界”转化的核心技术枢纽在于开放词汇目标检测（ OVD）。本部分将深入探讨 OVD 的两种主流技术范式：一种是以 Grounding DINO 为代表，追求极致语义对齐与定位精度的“高精度流派”；另一种是以 YOLO-World 为代表，致力于工业级端到端部署的“实时化流派”。这两者共同构成了当前开放感知领域的技术基石。
 
-\subsection{高精度 OVD 框架：基于 Transformer 的多阶段深度对齐}
-在开放词汇检测（OVD）任务中，核心挑战在于如何将离散的文本标签与连续的视觉空间表示进行对齐。高精度 OVD 框架提出了一种范式转变的思路：它不再将视觉和文本视为独立模态，而是基于"Grounded Pre-training"思想，摒弃了传统检测器仅在逻辑层进行类别映射的局限。该框架通过在 Transformer 的编码器、查询初始化及解码器全生命周期内引入强力的文本干预，实现了视觉与语言的深度耦合。
+\subsection{高精度 OVD 框架：基于 Transformer 的多阶段深度对齐 (Grounding DINO)}
+在开放词汇检测（OVD）任务中，核心挑战在于如何将离散的文本标签与连续的视觉空间表示进行对齐。Grounding DINO 提出了一种范式转变的思路：它不再将视觉和文本视为独立模态，而是基于“Grounded Pre-training”思想，摒弃了传统检测器仅在逻辑层进行类别映射的局限。该模型通过在 Transformer 的编码器、查询初始化及解码器全生命周期内引入强力的文本干预，实现了视觉与语言的深度耦合。
 
-下图展示了该框架的整体架构及其三阶段对齐流：
+下图展示了 Grounding DINO 的整体架构及其三阶段对齐流：
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.9\textwidth]{../picture/p1.png}
-    \caption{基于 Transformer 的高精度 OVD 框架整体架构与三阶段对齐流}
+    \caption{Grounding DINO 整体架构与三阶段对齐流}
     \label{fig:p1}
 \end{figure}
 \textit{注：该架构清晰呈现了文本与图像特征从早期特征增强，到语言引导的查询选择，再到最终跨模态解码的闭环过程。}
 
 \subsubsection{跨模态特征增强器}
-传统开放集检测器通常采用"双塔架构"，仅在最后的分类头进行浅层的点积对齐，这导致视觉特征缺乏语义指导。高精度 OVD 框架引入了\textbf{跨模态特征增强器（Cross-Modal Feature Enhancer）}，在特征提取的早期阶段实现视觉与语言的深度耦合。
-
-\textbf{架构设计：}该增强器由堆叠的 Transformer 层构成，采用\textbf{Deformable Self-Attention}机制高效处理多尺度视觉特征。与传统双塔架构不同，增强器通过双向跨模态注意力实现信息流转：
-
-\textbf{（1）视觉到文本的引导：}图像特征 $V \in \mathbb{R}^{H \times W \times d}$ 作为 Query，通过多头注意力机制感知文本特征 $T \in \mathbb{R}^{L \times d}$ 中的关键描述（$H, W$ 为特征图尺寸，$L$ 为文本序列长度，$d$ 为特征维度）。这一过程使得视觉特征能够根据文本语义动态调整空间权值分布，聚焦于与文本描述相关的区域。
-
-\textbf{（2）文本到视觉的注入：}文本特征 $T$ 作为 Key 和 Value，通过交叉注意力机制注入到视觉空间。这种注入不是简单的特征拼接，而是利用全局上下文消除语义歧义，使得视觉特征在进入后续模块之前就已经具备语义敏感性。
-
-双向跨模态注意力的数学表达为：
+传统开放集检测器通常采用"双塔架构"，仅在最后的分类头进行浅层的点积对齐，这导致视觉特征缺乏语义指导。Grounding DINO 引入了\textbf{跨模态增强器}，在特征提取的早期阶段实现视觉与语言的深度耦合。该模块由堆叠的 Transformer 层构成，利用 \textbf{Deformable Self-Attention} 高效处理多尺度视觉特征，并通过双向跨模态注意力实现信息流转：\textbf{视觉到文本的引导}，图像特征 $V$ 作为 Query，通过注意力机制感知文本中的关键描述，从而调整空间权值分布；\textbf{文本到视觉的注入}，文本特征 $T$ 注入到视觉空间，利用全局上下文消除语义歧义。
+其数学表达可简述为：
 \[
 V', T' = \text{Bi-MultiHeadAttention}(V, T)
 \]
-其中：
-\[
-\text{Attention}(Q, K, V) = \text{Softmax}\left(\frac{QK^\top}{\sqrt{d_k}}\right)V
-\]
-
-\textbf{优势分析：}这种\textbf{紧密融合}策略确保了视觉特征在进入预测头之前，就已经过语义过滤和增强。相比传统方法仅在最后进行浅层对齐，早期融合能够：
-\begin{itemize}
-    \item \textbf{提升长尾类别识别能力}：通过文本指导，模型能够更好地理解罕见类别的视觉特征
-    \item \textbf{增强复杂指代性表达的理解}：对于"穿着红色雨衣的小狗"这类复合描述，早期融合使得模型能够同时考虑多个语义属性
-    \item \textbf{减少语义歧义}：文本信息的早期注入有助于消除视觉特征中的歧义，提升检测精度
-\end{itemize}
+这种\textbf{紧密融合}策略确保了视觉特征在进入预测头之前，就已经过语义过滤，极大增强了模型对长尾类别及复杂指代性表达的感知精度。
 
 \subsubsection{语言引导的查询选择}
-为了在无限的语义空间中精确定位，高精度 OVD 框架改进了标准 DETR 的查询机制，利用语言先验来初始化对象查询。这是该框架的核心创新之一。
-
-\textbf{传统查询机制的局限：}标准 DETR 使用可学习的查询向量（Learnable Queries），这些查询在训练过程中学习通用的物体模式，但缺乏对特定文本描述的针对性。在开放词汇场景下，当用户输入新的类别描述时，通用查询可能无法有效定位目标。
-
-\textbf{对比驱动的查询初始化：}高精度框架采用\textbf{对比驱动的查询初始化（Contrastive-Driven Query Initialization）}策略。具体流程如下：
-
-\textbf{步骤1：相似度计算}。利用增强器输出的图像特征 $f_v \in \mathbb{R}^{H \times W \times d}$ 与文本特征 $f_t \in \mathbb{R}^{L \times d}$ 计算空间-语义相似度矩阵：
+为了在无限的语义空间中精确定位，Grounding DINO 改进了标准 DINO 的查询机制，利用语言先验来初始化对象查询。\textbf{对比驱动的初始化}：模型不再使用随机的 Learnable Queries，而是利用 Enhancer 输出的图像特征 $f_v$ 与文本特征 $f_t$ 计算相似度分数。\textbf{筛选逻辑}：根据相似度分数筛选出 Top-K 个图像高响应区域的索引：
 \[
-S = f_v \cdot f_t^\top \in \mathbb{R}^{H \times W \times L}
+\text{Indices} = \text{Top-K}(\text{Softmax}(f_v \cdot f_t^\top))
 \]
+这些索引被用于初始化 \textbf{Dynamic Anchor Boxes} 的位置坐标，而内容查询（Content Queries）则保持可学习状态。这种设计使得解码器从一开始就具备了“语义先验”，能够直接跳过无关区域，聚焦于与 Prompt 高度相关的候选目标，从而在零样本检测任务中表现出极强的鲁棒性。
 
-\textbf{步骤2：区域响应聚合}。对相似度矩阵进行空间聚合，得到每个空间位置的文本响应强度：
-\[
-R = \text{MaxPool}(\text{Softmax}(S, \text{dim}=-1)) \in \mathbb{R}^{H \times W}
-\]
-
-\textbf{步骤3：Top-K 区域选择}。根据响应强度筛选出 Top-K 个高响应区域的索引：
-\[
-\text{Indices} = \text{Top-K}(R, k=K)
-\]
-
-\textbf{步骤4：动态锚框初始化}。这些索引被用于初始化\textbf{动态锚框（Dynamic Anchor Boxes）}的位置坐标。具体而言，对于选中的区域索引 $(h_i, w_i)$，对应的锚框中心位置初始化为：
-\[
-\text{Anchor}_i = \left(\frac{w_i}{W}, \frac{h_i}{H}\right)
-\]
-而内容查询（Content Queries）则保持可学习状态，在训练过程中进一步优化。
-
-\textbf{优势分析：}这种设计使得解码器从一开始就具备了"语义先验"，能够：
-\begin{itemize}
-    \item \textbf{直接跳过无关区域}：查询初始化阶段就排除了与文本描述无关的背景区域
-    \item \textbf{聚焦高相关候选目标}：解码器只需在少量高响应区域进行精细化定位，大幅提升效率
-    \item \textbf{增强零样本泛化能力}：对于训练时未见过的类别描述，模型仍能通过语义相似度找到相关区域
-\end{itemize}
-
-\textbf{实例说明：}假设用户输入的文本提示是"穿着红色雨衣的小狗"。在这一阶段，模型会：
-\begin{enumerate}
-    \item 计算图像特征与"红色"、"雨衣"、"狗"等词汇的语义相似度
-    \item 识别出同时满足多个语义属性的区域（如既包含"红色"又包含"雨衣"特征，且具有"狗"的形状）
-    \item 在这些高响应区域初始化查询向量，使得后续解码过程能够直接聚焦于目标物体
-\end{enumerate}
-
-查询向量（Queries）从诞生的那一刻起，就携带了目标的几何位置先验和语义先验，这是该框架在零样本检测任务中表现出极强鲁棒性的关键原因。
+例如，假设 Prompt 是“穿着红色雨衣的小狗”，在这一阶段，模型会根据“红色”、“雨衣”、“狗”的联合语义分布，在复杂的背景中直接定位到那几个高相关的像素块。查询向量（Queries）从诞生的那一刻起，就携带了目标的几何位置先验。
 
 \subsubsection{跨模态解码器与子句级去噪}
-在解码阶段，高精度 OVD 框架引入了定制化的\textbf{文本交叉注意力（Text Cross-Attention）}层，并配合子句级处理机制，进一步细化对齐粒度。
-
-\textbf{文本交叉注意力机制：}与标准 DETR 解码器不同，该框架的每一层解码器都包含专门的 Text Cross-Attention 模块。给定查询特征 $Q \in \mathbb{R}^{K \times d}$（$K$ 为查询数量）和文本特征 $T \in \mathbb{R}^{L \times d}$，文本交叉注意力计算为：
-\[
-\text{TextCrossAttn}(Q, T) = \text{Softmax}\left(\frac{QT^\top}{\sqrt{d}}\right) T
-\]
-这一机制使得每个查询向量能够动态地从文本描述中提取相关信息，实现查询级别的语义对齐。
-
-\textbf{子句级掩码机制：}针对长文本描述，模型构建了特殊的\textbf{子句级注意力掩码（Phrase-Level Attention Mask）}。该机制的核心思想是：将长文本分解为多个名词短语（Noun Phrases），每个视觉区域仅与对应的短语交互，屏蔽句中无关词汇。
-
-具体实现中，对于文本描述 "A man holding a blue umbrella"，模型首先进行短语分割：
-\begin{itemize}
-    \item 短语1："man"
-    \item 短语2："holding"
-    \item 短语3："blue umbrella"
-\end{itemize}
-
-然后构建掩码矩阵 $M \in \{0, -\infty\}^{K \times L}$，其中 $M_{i,j} = 0$ 表示查询 $i$ 可以与文本位置 $j$ 交互，$M_{i,j} = -\infty$ 表示禁止交互。修改后的注意力计算为：
-\[
-\text{Attention}(Q, T, M) = \text{Softmax}\left(\frac{QT^\top}{\sqrt{d}} + M\right) T
-\]
-
-\textbf{优势分析：}子句级掩码机制带来了以下优势：
-\begin{itemize}
-    \item \textbf{防止语义干扰}：不会因为出现了"blue"就让模型去寻找蓝色的衣服，而是严格将其限制在"umbrella"的属性上
-    \item \textbf{确保细粒度属性的精确归属}：每个属性（如颜色、形状）都与其所属的物体正确关联
-    \item \textbf{降低假阳性率}：通过精确的语义匹配，显著减少了 OVD 场景中的误检
-\end{itemize}
-
-\textbf{循环交互解码：}解码器通过多层迭代，不断利用文本特征作为辅助信息来更新边界框坐标。与传统方法不同，该框架中文本特征不仅是分类的依据，更作为空间偏移的偏置项直接参与了边界框（BBox）的回归计算。
-
-具体而言，在第 $l$ 层解码器中，边界框回归不仅依赖于视觉特征，还融合了文本语义信息：
-\[
-\Delta bbox^{(l)} = \text{MLP}([f_{visual}^{(l)}, f_{text}^{(l)}])
-\]
-其中 $f_{text}^{(l)}$ 是经过 Text Cross-Attention 后的文本特征，$[\cdot, \cdot]$ 表示特征拼接。这种设计使得模型能够：
-\begin{itemize}
-    \item \textbf{引导遮挡目标的精确重建}：当目标被部分遮挡时，文本描述提供了额外的语义约束
-    \item \textbf{处理边缘模糊的目标}：文本信息帮助模型在边界不清晰的情况下做出更准确的定位
-    \item \textbf{实现像素级坐标微调}：通过多层迭代，模型能够对遮挡或尺度极小的目标（如远景中的车辆）进行精细化定位
-\end{itemize}
-
-通过这种\textbf{视觉-文本协同解码}机制，高精度 OVD 框架在复杂场景下仍能保持极高的检测精度。
+在解码阶段，Grounding DINO 引入了定制化的 \textbf{Text Cross-Attention} 层，并配合子句级处理机制，进一步细化对齐粒度。\textbf{子句级掩码}：针对长文本描述，模型构建了特殊的 $\text{Attention Mask}$。该机制强制每个视觉区域仅与对应的名词短语交互，屏蔽句中无关词汇，从而显著降低了 OVD 场景中的假阳性概率。例如，在处理指令 "A man holding a blue umbrella" 时，模型通过遮罩确保 "man"、"holding" 和 "blue umbrella" 分别对应不同的跨模态权重。这种设计防止了语义干扰，不会因为出现了"blue"就让模型去寻找蓝色的衣服，而是严格将其限制在"umbrella"的属性上，确保了细粒度属性的精确归属。\textbf{循环交互解码}：解码器层通过层级迭代，不断利用文本特征作为辅助信息来更新边界框坐标。此时，文本特征不仅是分类的依据，更作为空间偏移的偏置项直接参与了边界框（BBox）的回归计算，引导模型对遮挡或边缘模糊的目标进行精确重建。通过多层循环迭代，模型能对遮挡或尺度极小的目标（如远景中的车辆）进行像素级的坐标微调。
+Grounding DINO 专门设计了 $\text{Text Cross-Attention}$ 层，用于将文本信息注入到 Query 中，以实现更好的模态对齐。
 
 \subsubsection{分类与定位的对齐损失}
-针对开放词汇检测的特殊性，高精度 OVD 框架重新设计了损失函数，以更好地适应动态类别空间和语义对齐需求。
-
-\textbf{开放集分类损失：}传统检测器使用固定类别的交叉熵损失，这在开放词汇场景下不再适用。该框架采用\textbf{基于相似度的分类损失}，通过计算查询特征与文本嵌入的点积相似度来判定类别。
-
-对于每个查询 $q_i$ 和文本词汇表 $\mathcal{V} = \{t_1, t_2, ..., t_C\}$，分类分数计算为：
+除此以外，Grounding DINO 针对开放集特性重新设计了分类损失。它摒弃了传统的固定类别 Cross-Entropy，而是基于\textbf{点积相似度}计算预测结果，并采用 \textbf{Focal Loss} 进行优化：
 \[
-s_{i,j} = \frac{q_i \cdot t_j}{\|q_i\| \|t_j\|} = \cos(q_i, t_j)
+\mathcal{L}_{cls} = \text{FocalLoss}(\text{Softmax}(f_{query} \cdot f_{text}^\top), y_{gt})
 \]
+该机制计算预测出的 BBox 视觉嵌入 $f_{query}$ 与文本标签 $f_{text}$ 的相似度，强制正样本对在向量空间中产生高响应，而与无关文本保持低响应。这种设计有效地解决了正负样本极度不平衡的问题，使得模型在 Zero-shot（零样本）迁移时能根据语义相似度进行准确判别。
 
-然后采用 \textbf{Focal Loss} 来处理正负样本不平衡问题：
-\[
-\mathcal{L}_{cls} = -\frac{1}{N}\sum_{i=1}^{N}\sum_{j=1}^{C} \alpha_j (1-p_{i,j})^\gamma \log(p_{i,j}) \cdot y_{i,j}
-\]
-其中 $p_{i,j} = \text{Softmax}(s_{i,j})$ 是归一化的相似度分数，$y_{i,j}$ 是真实标签，$\alpha_j$ 是类别权重，$\gamma$ 是聚焦参数。
+此外，在定位分支，Grounding DINO 依然保留了标准的 \textbf{L1 Loss} 和 \textbf{GIOU Loss} 来确保边界框回归的几何精度。
 
-\textbf{损失设计的优势：}
-\begin{itemize}
-    \item \textbf{适应动态类别空间}：无需预先定义固定类别数，可以处理任意大小的词汇表
-    \item \textbf{语义相似度驱动}：通过余弦相似度，模型能够识别语义相近的类别（如"dog"和"puppy"）
-    \item \textbf{解决样本不平衡}：Focal Loss 能够自动关注难样本，提升训练效果
-    \item \textbf{零样本泛化}：在 Zero-shot 迁移时，模型能够根据语义相似度进行准确判别
-\end{itemize}
+\subsection{实时化 OVD 框架：重参数化带来的感知革命 (YOLO-World)}
+虽然Grounding DINO 等基于 Transformer 为核心的框架在精度上屡创新高，但在边缘计算和实时监控场景下，其高昂的计算成本（FLOPs）和推理延迟成为了瓶颈。YOLO-World 的出现填补了这一空白，它实现了“开集检测”与“实时推理”的完美统一。该模型在 V100 上能以 52.0 FPS 的速度实现高精度的零样本检测，证明了轻量级检测器通过架构创新，同样可以驾驭复杂的开放词汇场景。
 
-\textbf{定位损失：}在定位分支，框架保留了标准的 \textbf{L1 Loss} 和 \textbf{GIOU Loss} 来确保边界框回归的几何精度：
-\[
-\mathcal{L}_{bbox} = \lambda_1 \mathcal{L}_{L1} + \lambda_2 \mathcal{L}_{GIOU}
-\]
-
-其中 L1 Loss 确保坐标的精确性：
-\[
-\mathcal{L}_{L1} = \sum_{i=1}^{N} |bbox_i^{pred} - bbox_i^{gt}|
-\]
-
-GIOU Loss 考虑边界框的重叠和尺度：
-\[
-\mathcal{L}_{GIOU} = 1 - \text{GIOU}(bbox^{pred}, bbox^{gt})
-\]
-
-\textbf{总损失函数：}最终的训练损失为分类损失和定位损失的加权和：
-\[
-\mathcal{L}_{total} = \mathcal{L}_{cls} + \lambda_{bbox} \mathcal{L}_{bbox}
-\]
-
-通过这种\textbf{语义对齐与几何精度的联合优化}，高精度 OVD 框架能够在保持高定位精度的同时，实现强大的零样本泛化能力。
-
-\subsection{实时化 OVD 框架：重参数化带来的感知革命}
-虽然基于 Transformer 的高精度框架在精度上屡创新高，但在边缘计算和实时监控场景下，其高昂的计算成本（FLOPs）和推理延迟成为了瓶颈。实时化 OVD 框架的出现填补了这一空白，它实现了"开集检测"与"实时推理"的完美统一。该框架在 V100 上能以 50+ FPS 的速度实现高精度的零样本检测，证明了轻量级检测器通过架构创新，同样可以驾驭复杂的开放词汇场景。
-
-下图展示了实时化 OVD 框架的整体架构，清晰呈现了其如何将文本编码器、YOLO 骨干网以及特征融合模块有机结合：
+下图展示了 YOLO-World 的整体架构，清晰呈现了其如何将文本编码器、YOLO 骨干网以及特征融合模块有机结合：
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.9\textwidth]{../picture/p2.png}
-    \caption{实时化 OVD 框架整体架构}
+    \caption{YOLO-World 整体架构}
     \label{fig:p2}
 \end{figure}
-\textit{注：如图所示，该框架包含图像编码器、文本编码器以及核心的 RepVL-PAN 模块，最后通过对比头输出目标位置与类别嵌入。}
+\textit{注：如图所示，YOLO-World 包含图像编码器、文本编码器以及核心的 RepVL-PAN 模块，最后通过对比头输出目标位置与类别嵌入。}
 
-下图进一步对比了不同检测框架的设计理念：
-\begin{figure}[htbp]
-    \centering
-    \includegraphics[width=0.9\textwidth]{../picture/Detection Framework.png}
-    \caption{不同 OVD 检测框架的对比}
-    \label{fig:detection_framework}
-\end{figure}
+\subsubsection{RepVL-PAN与视觉-语义交互}
+YOLO-World 并没有简单地将文本特征拼接到 YOLO 的 Head 上，而是设计了一种全新的\textbf{重参数化视觉-语言路径聚合网络（RepVL-PAN）}。在训练阶段，模型引入了文本引导的 CSPLayer，通过卷积算子与文本向量的交互，动态地调整视觉特征的权重。不同于 Transformer 的全对齐，RepVL-PAN 侧重于利用文本信息作为“滤波器”，对视觉特征进行通道级的重构，从而在保留 YOLO 实时性的同时注入了语义敏感度。此外，为了增强全局语义理解，模型在颈部网络中嵌入了图像池化注意力，使得 YOLO 这种局部感知见长的模型也能获得大尺度语义视野。
 
-\subsubsection{RepVL-PAN 与视觉-语义交互}
-实时化 OVD 框架并没有简单地将文本特征拼接到 YOLO 的检测头上，而是设计了一种全新的\textbf{重参数化视觉-语言路径聚合网络（Reparameterized Vision-Language Path Aggregation Network, RepVL-PAN）}。这是该框架的核心创新，实现了高效的多模态特征融合。
+\subsubsection{“先提示，后检测”：推理效率的质变}
+与 Grounding DINO 的实时交互不同，YOLO-World 采用了“先提示后检测（Prompt-then-detect）”的范式。在推理时，文本编码器可以被移除，文本嵌入被重新参数化为网络权重。
 
-\textbf{架构设计理念：}与 Transformer 架构的全局注意力机制不同，RepVL-PAN 采用\textbf{局部卷积 + 全局池化}的混合设计，在保持 YOLO 实时性的同时注入语义敏感度。
-
-\textbf{文本引导的 CSPLayer：}在训练阶段，RepVL-PAN 引入了文本引导的 CSPLayer（Cross Stage Partial Layer）。该模块的核心思想是：利用文本信息作为"滤波器"，对视觉特征进行通道级的动态重构。
-
-具体而言，给定视觉特征 $F_v \in \mathbb{R}^{H \times W \times C}$ 和文本特征 $F_t \in \mathbb{R}^{L \times d}$（经过文本编码器编码后的类别嵌入），文本引导的权重计算为：
-\[
-W_{text} = \text{GlobalPool}(\text{MLP}(F_t)) \in \mathbb{R}^{C}
-\]
-
-然后通过通道级乘法调整视觉特征：
-\[
-F_v' = F_v \odot \text{Broadcast}(W_{text})
-\]
-其中 $\odot$ 表示逐元素乘法，$\text{Broadcast}$ 将权重广播到空间维度。
-
-\textbf{优势分析：}这种设计的优势在于：
-\begin{itemize}
-    \item \textbf{计算效率高}：相比 Transformer 的 $O(N^2)$ 复杂度，卷积操作仅为 $O(N)$，大幅降低计算成本
-    \item \textbf{保留空间结构}：卷积操作保留了视觉特征的空间结构信息，有利于精确定位
-    \item \textbf{动态语义过滤}：文本信息动态调整不同通道的权重，使得模型能够聚焦于与文本描述相关的视觉特征
-\end{itemize}
-
-\textbf{图像池化注意力机制：}为了增强全局语义理解，RepVL-PAN 在颈部网络中嵌入了\textbf{图像池化注意力（Image Pooling Attention）}模块。该模块首先对视觉特征进行全局池化：
-\[
-F_{global} = \text{GlobalAvgPool}(F_v) \in \mathbb{R}^{C}
-\]
-
-然后计算空间注意力权重：
-\[
-A = \text{Sigmoid}(\text{Conv}([F_v, \text{Broadcast}(F_{global})])) \in \mathbb{R}^{H \times W}
-\]
-
-最后应用注意力权重：
-\[
-F_v'' = F_v \odot A
-\]
-
-\textbf{设计意义：}图像池化注意力机制使得 YOLO 这种局部感知见长的模型也能获得大尺度语义视野，这对于理解复杂场景和长距离依赖关系至关重要。同时，该机制的计算开销极小，不会影响模型的实时性能。
-
-\textbf{多尺度特征融合：}RepVL-PAN 继承了 YOLO 的多尺度特征金字塔设计，在 P3、P4、P5 三个尺度上进行特征融合。每个尺度都应用了文本引导的 CSPLayer 和图像池化注意力，确保不同尺度的特征都具备语义敏感性。
-
-\subsubsection{"先提示，后检测"：推理效率的质变}
-与高精度框架的实时交互不同，实时化 OVD 框架采用了\textbf{"先提示后检测（Prompt-then-detect）"}的范式。这是该框架实现高效推理的关键创新。
-
-\textbf{重参数化技术原理：}在训练阶段，模型学习视觉特征与文本嵌入的对齐关系。在推理时，如果用户预设了固定的类别词汇表（Offline Vocabulary），可以将文本编码器移除，将文本嵌入重新参数化为网络权重。
-
-\textbf{具体实现流程：}
-
-\textbf{步骤1：离线文本编码}。用户输入的类别名称集合 $\mathcal{V} = \{c_1, c_2, ..., c_N\}$ 通过文本编码器（如 CLIP Text Encoder）转化为文本嵌入矩阵：
-\[
-W_{text} = [E(c_1), E(c_2), ..., E(c_N)]^\top \in \mathbb{R}^{N \times d}
-\]
-其中 $E(\cdot)$ 是文本编码函数，$N$ 是类别数，$d$ 是嵌入维度。
-
-\textbf{步骤2：权重融合}。将文本嵌入矩阵直接作为检测头中 $1 \times 1$ 卷积层的卷积核参数。具体而言，检测头的分类分支可以表示为：
-\[
-\text{Score} = \text{Conv1x1}(F_v, W_{text}) = F_v \cdot W_{text}^\top
-\]
-其中 $F_v \in \mathbb{R}^{H \times W \times d}$ 是视觉特征，$\text{Score} \in \mathbb{R}^{H \times W \times N}$ 是分类分数。
-
-\textbf{步骤3：纯视觉推理}。经过重参数化后，模型在推理时无需运行文本编码器，也无需进行在线的跨模态注意力计算。从计算链路上看，它退化为了一个纯视觉的 YOLO 模型。
-
-\textbf{效率提升分析：}重参数化技术带来的效率提升主要体现在：
-
-\begin{table}[htbp]
-    \centering
-    \small
-    \begin{tabular}{@{}lcc@{}}
-        \toprule
-        计算模块 & 传统方法 & 重参数化后 \\
-        \midrule
-        文本编码器 & 需要运行（$\sim$10ms） & 移除（0ms） \\
-        跨模态注意力 & 需要计算（$\sim$15ms） & 移除（0ms） \\
-        检测头 & 标准计算 & 标准计算 \\
-        \midrule
-        总推理时间 & $\sim$25-30ms & $\sim$15-20ms \\
-        \midrule
-        推理速度 & $\sim$30-40 FPS & $\sim$50-70 FPS \\
-        \bottomrule
-    \end{tabular}
-    \caption{重参数化前后的推理效率对比}
-    \label{tab:reparam_efficiency}
-\end{table}
-
-\textbf{优势总结：}
-\begin{itemize}
-    \item \textbf{大幅降低推理延迟}：移除文本编码和跨模态计算，推理速度提升 50-100\%
-    \item \textbf{降低内存占用}：无需存储文本编码器的中间结果，内存占用减少约 30\%
-    \item \textbf{简化部署流程}：推理时只需加载视觉模型，部署更加简单
-    \item \textbf{支持动态词汇表更新}：当需要添加新类别时，只需重新计算文本嵌入并更新卷积权重，无需重新训练模型
-\end{itemize}
-
-\textbf{应用场景：}这种"离线编码、在线匹配"的逻辑，彻底解决了 OVD 落地难的痛点。特别适合以下场景：
-\begin{itemize}
-    \item \textbf{固定类别检测}：如工业质检中的特定缺陷类型检测
-    \item \textbf{实时监控系统}：需要高帧率处理的视频监控场景
-    \item \textbf{边缘设备部署}：计算资源受限的嵌入式设备
-    \item \textbf{大规模批量处理}：需要处理大量图像的离线任务
-\end{itemize}
-
-通过重参数化技术，实时化 OVD 框架在保持强大零样本能力的同时，实现了工业级的推理效率，为开放词汇检测的广泛应用奠定了基础。
+在实际应用中，用户通常会预设一组感兴趣的类别（Offline Vocabulary）。YOLO-World 允许将这些类别的文本嵌入通过重参数化技术提前融合进检测头的卷积权重中。这意味着：在推理过程中，模型无需运行文本编码器，也无需进行在线的跨模态注意力计算。从计算链路上看，它退化为了一个纯视觉的 YOLO 模型，从而在 V100 等设备上实现了超过 50 FPS 的惊人速度。这种"离线编码、在线匹配"的逻辑，彻底解决了 OVD 落地难的痛点。具体而言，用户输入的类别名称通过 Text Encoder 转化为文本嵌入矩阵 $W_{text}$，模型将该矩阵预先计算，并将其数值直接作为检测头中 $1 \times 1$ 卷积层的卷积核参数。
 
 \subsubsection{区域-文本对比学习策略}
-为了在大规模无标注数据中学习泛化性，实时化 OVD 框架引入了\textbf{区域-文本对比学习（Region-Text Contrastive Learning）}策略。这是该框架实现强大零样本能力的关键训练机制。
+为了在大规模无标注数据中学习泛化性，YOLO-World 引入了区域-文本对比损失。通过将提取到的候选框特征与大规模图文对（如 CC3M）中的文本描述进行距离测算，模型学到了如何在一个统一的、高维的语义空间中对物体进行归类。这使得它即便在没有经过精细标注的类别（如某些特定品牌的商品）上，也能凭借大规模预训练带来的常识进行准确预测。
 
-\textbf{对比学习目标：}给定一个 batch 包含 $B$ 个图像-文本对 $\{(I_i, T_i)\}_{i=1}^B$，对于每个图像 $I_i$，模型提取 $M$ 个候选区域特征 $\{r_{i,j}\}_{j=1}^M$。对比学习的目标是：最大化匹配的（区域，文本）对的相似度，最小化不匹配对的相似度。
+\subsection{对比分析}
+总结来看，Grounding DINO 代表了开放目标检测的"上限"，它通过复杂的 Transformer 交互实现了对复杂指令的精准解析，是离线分析和高质量标注任务的首选。而 YOLO-World 则代表了"广度"，它利用重参数化技术将开放能力平民化，让实时嵌入式设备具备了识别万物的可能。
 
-\textbf{损失函数设计：}采用 InfoNCE 损失函数：
-\[
-\mathcal{L}_{contrast} = -\frac{1}{B}\sum_{i=1}^{B}\frac{1}{M}\sum_{j=1}^{M}\log\frac{\exp(sim(r_{i,j}, T_i)/\tau)}{\sum_{k=1}^{B}\exp(sim(r_{i,j}, T_k)/\tau)}
-\]
-其中 $sim(\cdot, \cdot)$ 是余弦相似度，$\tau$ 是温度参数（通常设为 0.07）。
+从架构设计角度看，\textbf{架构的"高保真"视觉提取}：Grounding DINO 这种深度融合模型虽然强大，但视觉特征被语言高度"污染"了。在 OWD 任务中，我们需要发现那些"没有名字（Unknown）"的物体。YOLO-World 的重参数化设计使得视觉骨干网络保留了更纯粹的物体显著性（Objectness）感知能力，更利于通过"通配符（Wildcard）"等技术捕捉未知目标。从学习效率角度看，\textbf{增量学习的极低成本}：OWD 需要模型能够不断学习新类别。基于重参数化的架构，学习新类别只需更新离线词汇表向量，而无需对整个庞大的 Transformer 网络进行微调。这为\textbf{高效增量学习}提供了天然的基础。从应用部署角度看，\textbf{计算资源的可扩展性}：开放世界任务通常涉及处理海量的无标注数据和动态视频流，高吞吐量（High Throughput）是基本要求。YOLO-World 的效率优势使其成为构建复杂感知系统的唯一可行基座。
 
-\textbf{大规模预训练数据：}框架在 CC3M（Conceptual Captions 3M）等大规模图文对数据集上进行预训练。这些数据集包含数百万个图像-文本对，覆盖了丰富的物体类别和场景。
-
-\textbf{训练策略：}
-\begin{itemize}
-    \item \textbf{多尺度区域采样}：从不同尺度的特征图中采样候选区域，确保覆盖不同大小的物体
-    \item \textbf{困难负样本挖掘}：选择与正样本相似度较高的负样本进行对比，提升模型的判别能力
-    \item \textbf{温度参数调节}：通过调整温度参数 $\tau$，控制相似度分布的尖锐程度，影响模型的泛化能力
-\end{itemize}
-
-\textbf{优势分析：}
-\begin{itemize}
-    \item \textbf{利用大规模无标注数据}：无需精细标注，仅需图像-文本对即可训练
-    \item \textbf{学习通用语义表示}：通过对比学习，模型学到了物体与文本描述之间的通用对应关系
-    \item \textbf{强大的零样本泛化}：即使在没有经过精细标注的类别（如某些特定品牌的商品、罕见动物等）上，模型也能凭借大规模预训练带来的常识进行准确预测
-    \item \textbf{跨域适应能力}：通过大规模数据的预训练，模型具备了跨域泛化的能力
-\end{itemize}
-
-\textbf{与高精度框架的对比：}实时化框架的对比学习策略与高精度框架的主要区别在于：
-\begin{itemize}
-    \item \textbf{数据规模}：实时化框架更依赖大规模预训练数据来学习泛化能力
-    \item \textbf{对齐粒度}：高精度框架通过多阶段对齐实现细粒度匹配，实时化框架通过对比学习实现粗粒度但高效的对齐
-    \item \textbf{计算效率}：实时化框架的对比学习主要在训练阶段进行，推理时通过重参数化移除，不影响效率
-\end{itemize}
-
-通过区域-文本对比学习，实时化 OVD 框架在保持高效推理的同时，实现了强大的零样本检测能力，为开放词汇检测的广泛应用提供了技术基础。
-
-\subsection{两种技术范式的对比分析}
-总结来看，基于 Transformer 的高精度框架代表了开放目标检测的"精度上限"，它通过复杂的多阶段对齐实现了对复杂指令的精准解析，是离线分析和高质量标注任务的首选。而基于重参数化的实时化框架则代表了"效率广度"，它利用重参数化技术将开放能力平民化，让实时嵌入式设备具备了识别万物的可能。
-
-\begin{table}[htbp]
-    \centering
-    \small
-    \begin{tabular}{@{}p{2.5cm}p{4.5cm}p{4.5cm}@{}}
-        \toprule
-        对比维度 & 高精度框架（Transformer） & 实时化框架（重参数化） \\
-        \midrule
-        \textbf{架构基础} & Transformer（DETR系列） & CNN（YOLO系列） \\
-        \midrule
-        \textbf{对齐机制} & 多阶段深度对齐（编码器+查询+解码器） & 重参数化对齐（训练时融合，推理时移除） \\
-        \midrule
-        \textbf{推理速度} & $\sim$10-20 FPS & $\sim$50-70 FPS \\
-        \midrule
-        \textbf{检测精度} & 极高（复杂场景下表现优异） & 高（简单到中等复杂度场景） \\
-        \midrule
-        \textbf{计算复杂度} & 高（$O(N^2)$ 注意力） & 低（$O(N)$ 卷积） \\
-        \midrule
-        \textbf{内存占用} & 高（$\sim$2-4GB） & 低（$\sim$500MB-1GB） \\
-        \midrule
-        \textbf{适用场景} & 离线分析、高质量标注、复杂指令理解 & 实时监控、边缘部署、批量处理 \\
-        \midrule
-        \textbf{增量学习} & 需要微调整个网络 & 仅需更新词汇表向量 \\
-        \bottomrule
-    \end{tabular}
-    \caption{两种 OVD 技术范式的综合对比}
-    \label{tab:ovd_paradigm_compare}
-\end{table}
-
-\textbf{从架构设计角度看：}
-
-\textbf{（1）视觉特征提取的"保真度"：}高精度框架的深度融合模型虽然强大，但视觉特征被语言高度"污染"了。在开放世界检测（OWD）任务中，我们需要发现那些"没有名字（Unknown）"的物体。深度融合可能导致视觉特征过度依赖文本信息，从而影响对未知物体的感知能力。
-
-实时化框架的重参数化设计使得视觉骨干网络保留了更纯粹的物体显著性（Objectness）感知能力。在推理时，文本信息被融合到检测头权重中，视觉特征提取过程保持相对独立，更利于通过"通配符（Wildcard）"等技术捕捉未知目标。
-
-\textbf{（2）语义对齐的粒度：}高精度框架通过三阶段对齐（特征增强、查询初始化、解码器）实现了细粒度的语义对齐，能够处理复杂的指代性表达（如"穿着红色雨衣的小狗"）。实时化框架通过对比学习和重参数化实现了粗粒度但高效的对齐，更适合处理简单的类别名称。
-
-\textbf{从学习效率角度看：}
-
-\textbf{（1）增量学习的成本：}开放世界检测需要模型能够不断学习新类别。高精度框架学习新类别需要微调整个 Transformer 网络，计算成本高（通常需要数小时到数天）。实时化框架基于重参数化的架构，学习新类别只需更新离线词汇表向量（参数量通常小于 1MB），计算成本极低（通常只需数分钟），这为\textbf{高效增量学习}提供了天然的基础。
-
-\textbf{（2）训练数据需求：}高精度框架通过多阶段对齐，能够从相对较少的数据中学习到复杂的语义关系。实时化框架更依赖大规模预训练数据（如 CC3M）来学习泛化能力，但一旦预训练完成，后续的适配和更新成本很低。
-
-\textbf{从应用部署角度看：}
-
-\textbf{（1）计算资源的可扩展性：}开放世界任务通常涉及处理海量的无标注数据和动态视频流，高吞吐量（High Throughput）是基本要求。实时化框架的效率优势使其成为构建复杂感知系统的唯一可行基座。高精度框架虽然精度更高，但在大规模部署时面临计算资源瓶颈。
-
-\textbf{（2）部署灵活性：}实时化框架通过重参数化，推理时退化为纯视觉模型，部署更加灵活，可以轻松集成到现有的视觉处理流水线中。高精度框架需要同时部署视觉和文本编码器，部署复杂度较高。
-
-\textbf{技术演进的意义：}
-
-这种从"重架构深度融合"向"轻量化重参数化"的演进，标志着 OVD 领域已经完成了从实验室方案向工业化可行方案的初步转型。两种范式各有优势，在实际应用中可以根据具体需求进行选择：
-
-\begin{itemize}
-    \item \textbf{高精度框架}：适合对精度要求极高的场景，如医疗影像分析、科学图像处理等
-    \item \textbf{实时化框架}：适合对效率要求极高的场景，如实时监控、自动驾驶、工业质检等
-    \item \textbf{混合方案}：在某些场景下，可以结合两种框架的优势，如使用高精度框架进行离线分析，使用实时化框架进行在线检测
-\end{itemize}
-
-而在接下来的第三部分中，我们将讨论如何在此基础上，进一步赋予模型"发现未知"的能力，即迈向真正的开放世界检测（OWD）。
+这种从“重架构深度融合”向“轻量化重参数化”的演进，标志着 OVD 领域已经完成了从实验室方案向工业化可行方案的初步转型。而在接下来的第三部分中，我们将讨论如何在此基础上，进一步赋予模型“发现未知”的能力，即迈向真正的开放世界（OWD）。
 
 \section{迈向开放与统一：OVD 向 OWD 的进阶与探索（基于 YOLO-World 提出的 OVD 框架）}
 本部分介绍开放目标检测领域最具前沿性的挑战：如何将 OVD 的零样本泛化能力，与 OWD 的未知发现、持续学习能力进行统一。传统方法往往只专注于其中一个任务，而现实应用场景往往需要同时具备两种能力。本节将深入探讨两个代表性的统一框架：OW-OVD 和 YOLO-UniOW，它们分别从不同角度实现了 OVD 与 OWOD 的统一。
 
 \subsection{OVD 与 OWD 的统一任务探索：OW-OVD}
+\textit{论文：\textbf{OW-OVD: Unified Open World and Open Vocabulary Object Detection}\cite{owovd2025}}
 
 OW-OVD\cite{owovd2025} 是首个明确提出要统一解决 OVD 和 OWOD 两个任务的检测器。其核心思想是在保持 OVD 检测器零样本泛化能力的同时，赋予其主动检测未知物体并通过增量学习持续优化的能力。与现有方法（如 FOMO）不同，OW-OVD 的关键创新在于\textbf{不改变 OVD 的标准推理过程}，从而确保其零样本能力不受影响。
 
@@ -707,56 +383,10 @@ OW-OVD 在 OWOD 基准任务 M-OWODB 和 S-OWODB 上进行了验证。实验结�
 
 这些结果证明了 OW-OVD 方法的有效性：它不仅成功统一了 OVD 和 OWOD 两个任务，还在保持 OVD 零样本能力的同时，显著提升了未知物体检测的性能。
 
-\subsubsection{深入分析与讨论}
-\textbf{（1）VSAS 方法的理论基础与有效性分析}
-
-VSAS 方法的核心假设是：未知物体与已知物体在通用属性上具有相似性。这一假设基于认知科学中的\textbf{属性继承理论}：即使我们从未见过某个物体，也能通过其与已知物体的共同属性（如颜色、形状、材质等）来识别其物体性。OW-OVD 通过计算正负样本的属性相似度分布差异，数学上可以表示为：
-\[
-\Delta_{attr} = \mathbb{E}_{p \sim \mathcal{P}_{pos}}[sim(f_v(p), f_{attr})] - \mathbb{E}_{n \sim \mathcal{P}_{neg}}[sim(f_v(n), f_{attr})]
-\]
-其中 $\mathcal{P}_{pos}$ 和 $\mathcal{P}_{neg}$ 分别表示正样本和负样本的分布。当 $\Delta_{attr}$ 接近 0 时，说明该属性在标注区域和未标注区域中都常见，适合用于识别未知物体。
-
-然而，VSAS 方法也存在局限性：\textbf{属性选择的敏感性}。如果训练数据中某些通用属性（如"圆形"、"红色"）恰好与已知类别高度相关，VSAS 可能会错误地选择这些属性，导致未知检测的假阳性率上升。此外，属性选择的多样性约束虽然有助于避免属性冗余，但如何平衡多样性和有效性仍是一个开放问题。
-
-\textbf{（2）HAUF 融合策略的数学建模}
-
-HAUF 方法将未知检测问题转化为一个概率估计问题。给定视觉区域特征 $f_v$，其属于未知类别的概率可以建模为：
-\[
-P(unknown|f_v) = \alpha \cdot U_{known}(f_v) + (1-\alpha) \cdot S_{attr}(f_v)
-\]
-其中 $U_{known}(f_v)$ 表示已知类别的不确定性（可以通过熵或最大置信度的补集计算），$S_{attr}(f_v)$ 表示加权属性相似度，$\alpha$ 是平衡系数。
-
-这种设计的优势在于：\textbf{双重验证机制}。仅当模型对已知类别不确定\textbf{且}该区域与通用属性匹配时，才判定为未知。这有效降低了将背景或已知类别的低置信度检测误判为未知的概率。
-
-\textbf{（3）与传统方法的详细对比}
-
-OW-OVD 相比传统 OWOD 方法（如 ORE、OW-DETR）的核心优势在于：\textbf{利用 OVD 的语义先验}。传统方法仅依赖视觉特征的统计特性（如能量模型、注意力权重）来识别未知，缺乏语义指导。OW-OVD 通过属性选择和文本嵌入，将语义信息引入未知检测，使得模型能够理解"什么是物体"而不仅仅是"什么不是已知类别"。
-
-与 FOMO 等基于 OVD 的方法相比，OW-OVD 的关键创新是\textbf{保持 OVD 推理流程不变}。FOMO 通过修改相似度计算来预测未知，这会改变 OVD 的标准行为，可能导致零样本性能下降。OW-OVD 的后处理策略确保了 OVD 能力的完整性。
-
-\textbf{（4）实验结果的深入解读}
-
-OW-OVD 在 U-Recall 上的显著提升（+15.3）表明其未知发现能力远超传统方法。然而，需要注意的是，这一提升是在\textbf{相对简单的任务设定}（Task 1）下取得的。在更复杂的增量学习场景（Task 2+）中，未知检测的性能可能会受到灾难性遗忘的影响。OW-OVD 论文中未详细讨论增量学习策略，这是未来需要改进的方向。
-
-此外，OW-OVD 的性能提升很大程度上依赖于\textbf{预训练的 OVD 检测器质量}。如果基础 OVD 检测器（如 Grounding DINO）在某些场景下表现不佳，OW-OVD 的未知检测能力也会受到影响。这表明 OW-OVD 的性能存在"天花板"，受限于底层 OVD 模型的泛化能力。
-
-\textbf{（5）实际应用场景与局限性}
-
-OW-OVD 特别适合以下场景：\textbf{需要同时进行零样本检测和未知发现的混合任务}。例如，在智能安防系统中，用户可能指定检测某些已知威胁（如"可疑包裹"），同时系统需要主动发现未预期的异常物体。
-
-然而，OW-OVD 也存在局限性：\textbf{计算开销}。VSAS 和 HAUF 都需要额外的计算步骤，虽然不改变 OVD 推理流程，但会增加后处理时间。在实时性要求极高的场景下，这可能成为瓶颈。\textbf{属性依赖}。OW-OVD 的性能依赖于能否选择到有效的通用属性，在某些领域（如医疗影像），通用属性的定义可能较为困难。\textbf{伪标签质量}。虽然 OW-OVD 相比传统方法提升了伪标签质量，但在极端长尾分布的场景下，未知物体的伪标签噪声仍然存在。
-
 \subsection{高效的通用开放世界检测范式：YOLO-UniOW}
+\textit{论文：\textbf{YOLO-UniOW: Efficient Universal Open-World Object Detection}\cite{yolouniow2024}}
 
 YOLO-UniOW\cite{yolouniow2024} 是在统一 OVD/OWOD 任务上追求\textbf{效率}和\textbf{通用性}的最新尝试。与 OW-OVD 不同，YOLO-UniOW 基于 YOLO-World 的高效架构，提出了一个更简洁、更高效的解决方案，特别适合实时应用场景。
-
-下图展示了 YOLO-UniOW 的整体检测流程：
-\begin{figure}[htbp]
-    \centering
-    \includegraphics[width=0.9\textwidth]{../picture/Our Proposed Efficient Universal Open-World Object Detection Pipeline. .png}
-    \caption{YOLO-UniOW 高效通用开放世界目标检测流程}
-    \label{fig:yolouniow_pipeline}
-\end{figure}
 
 \subsubsection{设计理念：基于 YOLO-World 的统一框架}
 YOLO-UniOW 的核心设计理念是：\textbf{在 YOLO-World 的高效架构基础上，通过引入"通配符（Wildcard）"学习机制，实现对未知物体的检测}。这种设计的优势在于，它充分利用了 YOLO-World 的重参数化优势，使得未知检测和已知检测可以在同一个高效框架内完成。
@@ -765,14 +395,6 @@ YOLO-UniOW 的核心设计理念是：\textbf{在 YOLO-World 的高效架构基�
 
 \subsubsection{通配符学习机制}
 YOLO-UniOW 的\textbf{通配符学习（Wildcard Learning）}机制是其核心创新。在训练阶段，模型将未标注区域（即不属于任何已知类别的区域）与 wildcard 嵌入进行匹配。这种匹配过程使得模型学习到如何识别那些不属于已知类别但具有物体性的区域。
-
-下图详细展示了通配符学习的过程：
-\begin{figure}[htbp]
-    \centering
-    \includegraphics[width=0.9\textwidth]{../picture/The Process of Known Wildcard Learning.png}
-    \caption{通配符学习机制流程}
-    \label{fig:wildcard_learning}
-\end{figure}
 
 训练时，YOLO-UniOW 的损失函数包括两部分：已知类别的标准检测损失和未知类别的 wildcard 匹配损失。通过联合优化这两个损失，模型同时学习已知类别的检测和未知物体的识别。推理时，模型同时输出已知类别和 unknown 类别的检测结果，实现了真正的统一检测。
 
@@ -786,133 +408,10 @@ YOLO-UniOW 继承了 YOLO-World 的高效特性，在保持实时推理速度的
 
 此外，YOLO-UniOW 的通用性体现在：它既可以作为标准的 OVD 检测器使用（当用户提供类别列表时），也可以作为 OWOD 检测器使用（当需要主动发现未知物体时），还可以同时支持两种模式。这种灵活性使得 YOLO-UniOW 能够适应多样化的应用需求。
 
-\subsubsection{深入分析与讨论}
-\textbf{（1）通配符学习机制的理论基础}
-
-YOLO-UniOW 的 wildcard 学习本质上是在学习一个\textbf{通用的"物体性"表示}。与 OW-OVD 通过属性选择来识别未知不同，YOLO-UniOW 直接学习一个特殊的文本嵌入向量 $w_{wildcard} \in \mathbb{R}^d$，该向量在语义空间中代表"未知但具有物体性的区域"。
-
-训练时，wildcard 嵌入与未标注区域的匹配过程可以表示为：
-\[
-\mathcal{L}_{wildcard} = -\sum_{i \in \mathcal{U}} \log \frac{\exp(sim(f_{v,i}, w_{wildcard})/\tau)}{\exp(sim(f_{v,i}, w_{wildcard})/\tau) + \sum_{c \in \mathcal{K}} \exp(sim(f_{v,i}, w_c)/\tau)}
-\]
-其中 $\mathcal{U}$ 表示未标注区域集合，$\mathcal{K}$ 表示已知类别集合，$\tau$ 是温度参数。这种设计使得 wildcard 嵌入学习到与所有已知类别都不同，但又具有足够"物体性"的特征表示。
-
-\textbf{优势分析：} Wildcard 学习相比属性选择方法更加\textbf{端到端}和\textbf{自适应}。模型不需要预先定义属性集合，而是通过数据驱动的方式学习未知表示。这使得 YOLO-UniOW 能够适应不同领域的未知物体，而无需领域特定的属性定义。
-
-\textbf{（2）重参数化带来的效率优势量化分析}
-
-YOLO-UniOW 的效率优势主要体现在两个方面：\textbf{推理速度}和\textbf{增量学习成本}。
-
-在推理速度方面，由于 wildcard 嵌入可以通过重参数化技术融合到检测头权重中，推理时无需额外的跨模态注意力计算。假设文本编码器的计算复杂度为 $O(L \cdot d^2)$（$L$ 为序列长度，$d$ 为嵌入维度），而重参数化后的检测头仅需 $O(H \cdot W \cdot C)$（$H, W$ 为特征图尺寸，$C$ 为类别数）。在典型设置下（$L=77, d=512, H=W=20, C=100$），重参数化可以节省约 60-70\% 的推理时间。
-
-在增量学习方面，传统方法需要微调整个网络（参数量通常为数百MB），而 YOLO-UniOW 只需更新词汇表向量（参数量为 $d \times |\mathcal{V}|$，通常小于 1MB）。这使得模型更新的成本降低了\textbf{2-3个数量级}，特别适合边缘设备上的持续学习场景。
-
-\textbf{（3）与 OW-OVD 的详细对比}
-
-YOLO-UniOW 和 OW-OVD 代表了统一 OVD/OWOD 任务的两种不同哲学：
-
-\textbf{架构层面：} OW-OVD 基于 Transformer 架构（如 Grounding DINO），追求\textbf{高精度}和\textbf{深度语义对齐}；YOLO-UniOW 基于 CNN 架构（YOLO-World），追求\textbf{高效率}和\textbf{实时推理}。这种差异使得两者适用于不同的应用场景：OW-OVD 更适合离线分析和高质量标注任务，YOLO-UniOW 更适合实时监控和边缘部署。
-
-\textbf{未知检测策略：} OW-OVD 采用\textbf{后处理}策略，在保持 OVD 推理流程不变的基础上，通过属性选择和不确定性融合来识别未知；YOLO-UniOW 采用\textbf{端到端学习}策略，通过 wildcard 嵌入直接学习未知表示。后处理策略的优势是保持 OVD 能力的完整性，但需要额外的计算步骤；端到端策略的优势是更高效和统一，但可能影响 OVD 的零样本性能。
-
-\textbf{性能表现：} 在精度方面，OW-OVD 在 U-Recall 上取得了更高的提升（+15.3 vs +20+），这可能得益于其更复杂的属性选择机制。在效率方面，YOLO-UniOW 显著优于 OW-OVD，推理速度可达 50+ FPS，而基于 Transformer 的方法通常只有 10-20 FPS。
-
-\textbf{（4）Wildcard 学习的挑战与局限性}
-
-虽然 wildcard 学习具有诸多优势，但也面临一些挑战：
-
-\textbf{语义歧义问题：} Wildcard 嵌入需要同时满足两个看似矛盾的要求：与所有已知类别都不同（以区分未知），但又不能过于远离语义空间（以保持物体性）。如果 wildcard 嵌入学习不当，可能导致两种情况：\textbf{过度保守}（将已知类别误判为未知）或\textbf{过度激进}（将背景误判为未知物体）。
-
-\textbf{类别不平衡：} 在训练数据中，未标注区域的数量通常远大于标注区域。这种不平衡可能导致 wildcard 学习偏向于学习"背景"而非"未知物体"。YOLO-UniOW 通过采样策略和损失权重来缓解这一问题，但在极端不平衡的场景下，效果可能仍不理想。
-
-\textbf{增量学习中的遗忘：} 当新的未知类别被标注并加入已知类别集合后，wildcard 嵌入可能需要重新调整，以适应新的已知/未知边界。YOLO-UniOW 的增量学习机制虽然高效，但如何避免 wildcard 嵌入在学习新类别时发生"概念漂移"仍是一个开放问题。
-
-\textbf{（5）实际部署考虑}
-
-YOLO-UniOW 在实际部署中具有显著优势，但也需要考虑以下因素：
-
-\textbf{内存占用：} 虽然重参数化减少了推理时的计算量，但模型仍需要存储完整的视觉编码器和检测头。在资源受限的边缘设备上，这可能是限制因素。未来可以考虑模型压缩技术（如知识蒸馏、量化）来进一步降低内存占用。
-
-\textbf{词汇表管理：} 在实际应用中，词汇表可能会动态增长（从初始的 100 类增长到数千类）。如何高效地管理和更新大型词汇表，以及如何处理词汇表更新时的模型版本控制，都是实际部署中需要考虑的问题。
-
-\textbf{多模态输入：} YOLO-UniOW 主要支持文本提示输入。在实际应用中，用户可能希望通过图像示例（Few-shot）或自然语言描述（Referring Expression）来指定检测目标。如何扩展 YOLO-UniOW 以支持更丰富的输入模态，是未来改进的方向。
-
-\textbf{（6）性能评估的深入分析}
-
-YOLO-UniOW 在多个基准测试上取得了优异的性能，但需要注意以下几点：
-
-\textbf{评估指标的局限性：} 当前的 OWOD 评估指标（如 U-Recall、U-mAP）主要关注未知物体的发现能力，但较少关注\textbf{未知物体的描述质量}。在实际应用中，仅仅知道"这里有未知物体"是不够的，用户可能希望获得更详细的描述（如"这是一个红色的、圆形的未知物体"）。YOLO-UniOW 的 wildcard 机制虽然能检测未知，但缺乏对未知物体的细粒度描述能力。
-
-\textbf{跨域泛化：} YOLO-UniOW 的性能评估主要在标准数据集（如 COCO、LVIS）上进行。在实际应用中，模型需要处理不同领域的数据（如医疗影像、卫星图像、工业检测等）。YOLO-UniOW 基于 YOLO-World 的预训练，在自然图像上表现良好，但在领域特定的数据上可能需要额外的适配。
-
-\textbf{实时性与精度的权衡：} YOLO-UniOW 在保持实时性的同时实现了较高的精度，但这种权衡可能不是最优的。在某些对精度要求极高的场景（如医疗诊断），可能需要牺牲一定的速度来换取更高的精度。如何设计可配置的精度-速度权衡机制，是未来改进的方向。
-
 \subsection{两种统一范式的对比与总结}
 OW-OVD 和 YOLO-UniOW 代表了统一 OVD 和 OWOD 任务的两种不同技术路线。OW-OVD 采用属性选择和不确定性融合的方法，在不改变 OVD 推理过程的前提下实现未知检测，更适合需要保持 OVD 标准推理流程的场景。YOLO-UniOW 采用通配符学习机制，在高效架构基础上实现统一检测，更适合需要实时性能和高效增量学习的场景。
 
-两种方法都成功证明了：\textbf{基于成熟的 OVD 检测器，通过适当的技术创新，可以实现 OVD 和 OWOD 的统一}。这不仅解决了传统 OWOD 方法性能不足的问题，还为构建真正通用的开放感知系统提供了可行的技术路径。
-
-\subsubsection{综合对比分析}
-为了更清晰地理解两种方法的差异，我们从多个维度进行详细对比：
-
-\begin{table}[htbp]
-    \centering
-    \small
-    \begin{tabular}{p{2.5cm}p{4.5cm}p{4.5cm}}
-        \toprule
-        对比维度 & OW-OVD & YOLO-UniOW \\
-        \midrule
-        \textbf{基础架构} & Transformer (Grounding DINO) & CNN (YOLO-World) \\
-        \midrule
-        \textbf{未知检测机制} & 属性选择 + 不确定性融合（后处理） & Wildcard 嵌入学习（端到端） \\
-        \midrule
-        \textbf{推理速度} & $\sim$10-20 FPS & $\sim$50+ FPS \\
-        \midrule
-        \textbf{精度优势} & U-Recall: +15.3 (更高) & U-Recall: +20+ (较高) \\
-        \midrule
-        \textbf{OVD 能力保持} & 完全保持（不改变推理流程） & 可能受影响（端到端学习） \\
-        \midrule
-        \textbf{增量学习成本} & 中等（需微调部分模块） & 极低（仅更新词汇表） \\
-        \midrule
-        \textbf{计算复杂度} & 高（跨模态注意力） & 低（重参数化后为纯视觉） \\
-        \midrule
-        \textbf{适用场景} & 离线分析、高质量标注 & 实时监控、边缘部署 \\
-        \midrule
-        \textbf{主要优势} & 高精度、语义对齐深度 & 高效率、部署友好 \\
-        \midrule
-        \textbf{主要局限} & 计算开销大、属性依赖 & Wildcard 学习挑战、描述能力有限 \\
-        \bottomrule
-    \end{tabular}
-    \caption{OW-OVD 与 YOLO-UniOW 综合对比}
-    \label{tab:owod_yolouniow_comprehensive}
-\end{table}
-
-\subsubsection{技术路线的互补性}
-虽然 OW-OVD 和 YOLO-UniOW 采用了不同的技术路线，但它们实际上是\textbf{互补的}，而非竞争的：
-
-\textbf{（1）精度与效率的权衡：} OW-OVD 追求极致的精度和语义理解能力，适合对精度要求极高的场景（如医疗诊断、科学分析）；YOLO-UniOW 追求效率和实时性，适合对响应速度要求极高的场景（如自动驾驶、实时监控）。两者共同覆盖了开放目标检测的不同应用需求。
-
-\textbf{（2）后处理 vs 端到端：} OW-OVD 的后处理策略保证了 OVD 能力的完整性，这对于需要同时进行零样本检测和未知发现的混合任务至关重要；YOLO-UniOW 的端到端学习策略提供了更高的效率和统一性，适合需要快速部署和更新的场景。未来可以考虑将两种策略结合，在保持 OVD 能力的同时提升效率。
-
-\textbf{（3）属性选择 vs Wildcard 学习：} OW-OVD 的属性选择方法提供了更强的\textbf{可解释性}，用户可以通过分析选择的属性来理解模型的未知检测逻辑；YOLO-UniOW 的 wildcard 学习提供了更强的\textbf{自适应性}，模型可以自动学习未知表示而无需人工定义属性。两种方法可以相互借鉴：OW-OVD 可以引入类似 wildcard 的学习机制来减少属性选择的敏感性，YOLO-UniOW 可以引入属性信息来增强 wildcard 的语义理解能力。
-
-\subsubsection{共同挑战与未来方向}
-尽管两种方法都取得了显著进展，但它们仍面临一些共同的挑战：
-
-\textbf{（1）未知物体的细粒度描述：} 当前方法主要关注"发现未知"，但缺乏对未知物体的\textbf{详细描述能力}。未来需要研究如何结合视觉-语言模型的能力，为未知物体生成自然语言描述（如"一个红色的、圆形的未知物体"），从而帮助用户更好地理解检测结果。
-
-\textbf{（2）增量学习中的灾难性遗忘：} 虽然两种方法都支持增量学习，但在学习新类别时，如何避免对旧类别和未知检测能力的遗忘仍是一个挑战。未来需要研究更有效的持续学习策略，如基于回放的方法、基于正则化的方法等。
-
-\textbf{（3）跨域泛化能力：} 当前方法主要在自然图像上验证，但在领域特定的数据（如医疗影像、卫星图像）上的表现仍需进一步验证。未来需要研究如何提升模型的跨域泛化能力，可能需要引入领域适应技术或更大规模的跨域预训练数据。
-
-\textbf{（4）评估体系的完善：} 当前的 OWOD 评估指标主要关注未知发现能力，但缺乏对\textbf{未知物体质量}、\textbf{描述准确性}、\textbf{增量学习稳定性}等方面的评估。未来需要设计更全面的评估体系，以更好地反映模型在实际应用中的表现。
-
-\textbf{（5）统一框架的探索：} 虽然 OW-OVD 和 YOLO-UniOW 都实现了 OVD 和 OWOD 的统一，但它们主要关注检测任务。未来可以探索如何将开放目标检测与\textbf{开放词汇分割}、\textbf{开放词汇跟踪}等任务统一，构建更通用的开放感知系统。
-
-\subsubsection{总结与展望}
-OW-OVD 和 YOLO-UniOW 代表了开放目标检测领域的最新进展，它们成功地将 OVD 的零样本能力与 OWOD 的未知发现能力统一起来，解决了传统 OWOD 方法性能不足的问题。两种方法各有优势，适用于不同的应用场景，共同推动了开放目标检测领域的发展。
-
-未来，随着更多统一框架的出现，开放目标检测领域将朝着更加\textbf{通用}、\textbf{高效}、\textbf{可解释}的方向发展。我们期待看到更多创新的方法，能够进一步提升模型的性能，扩展应用场景，并最终实现真正通用的开放感知系统。
+两种方法都成功证明了：\textbf{基于成熟的 OVD 检测器，通过适当的技术创新，可以实现 OVD 和 OWOD 的统一}。这不仅解决了传统 OWOD 方法性能不足的问题，还为构建真正通用的开放感知系统提供了可行的技术路径。未来，随着更多统一框架的出现，开放目标检测领域将朝着更加通用、高效的方向发展。
 
 \bibliographystyle{plain}
 \begin{thebibliography}{99}
@@ -927,5 +426,4 @@ OW-OVD 和 YOLO-UniOW 代表了开放目标检测领域的最新进展，它们�
     \bibitem{yolouniow2024}
     "YOLO-UniOW: Efficient Universal Open-World Object Detection", 2024
 \end{thebibliography}
-
 \end{document}
